@@ -254,6 +254,8 @@ fixtures = [
 					"Customer Balance Confirmation",
 					"Customer/Supplier Balance Confirmation",
 					"Vendor Balance Confirmation",
+					"Estimate",
+					"Estimate Chetak Engineering",
 				],
 			]
 		},

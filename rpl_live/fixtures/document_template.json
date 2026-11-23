@@ -223,6 +223,423 @@
   "template_name": "Customer/Supplier Balance Confirmation"
  },
  {
+  "body_html": "{% set p = data.party.row %}{% set b = data.balances.row %}{% set m = data.meta.row %}{% set s = data.invoice_total.row %}{% set fy = bs(inputs.from_date)[:4] ~ '/' ~ bs(inputs.to_date)[2:4] %}\n<div style=\"font-size:11pt;line-height:1.6;margin-top:22px\"><div>Ref No.: {{ inputs.ref_no or '' }}</div><div style=\"text-align:right\">Date: {{ m.letter_date or '' }}</div>\n<div style=\"margin-top:18px\">To. {{ (p.party_name or '')|upper }}<br>PAN No: {{ p.tax_id or '' }}</div><div style=\"text-align:center;text-decoration:underline;margin-top:4px\">Ref: Account Confirmation for FY {{ fy }}</div>\n<p style=\"margin-top:18px\">Dear Sir/ Madam,</p><p>As per our account books showing following details regarding of Account Confirmation, we have confirmed our account at the Ashadh end of FY {{ fy }}.</p>\n<table style=\"width:100%;margin-top:12px\"><tr style=\"font-weight:bold;text-decoration:underline\"><td>Invoice No.</td><td>Taxable Amount</td><td>VAT Amount</td><td>Total Amount</td></tr>{% for r in data.invoices.rows %}<tr><td style=\"padding-left:14px\">{{ r.invoice_no }}</td><td>{{ money(r.taxable) }}</td><td>{{ money(r.vat) }}</td><td>{{ money(r.total) }}</td></tr>{% endfor %}<tr style=\"font-weight:bold\"><td>Total Amount</td><td>{{ money(s.taxable) }}</td><td>{{ money(s.vat) }}</td><td>{{ money(s.total) }}</td></tr></table>\n<p style=\"margin-top:20px;font-weight:bold\">Opening Balance: {{ money(b.opening_abs) }} ({{ b.opening_side }})<br>Closing Balance / {{ 'Receivable' if b.closing_side == 'Dr' else 'Payable' }}: Rs. {{ money(b.closing_abs) }} ({{ b.closing_side }})</p>\n<p style=\"margin-top:18px\">Please confirm our balance as per our attached documents within 15 working days from the received date of this confirmation letter. If we don't receive your confirmation in this regard in time, it will be considered as our balance is okay.</p><p style=\"margin-top:16px\">Thanking you for your kind cooperation<br>For: Raindrop Inc Pvt. Ltd.</p>\n<table style=\"width:100%;margin-top:142px\"><tr><td style=\"width:46%;vertical-align:top\">........................<br>Raindrop Inc Pvt. Ltd.<br>Finance Department<br>PAN: {{ org.vat }}</td><td style=\"text-align:center;vertical-align:top\">..................<br>Received by</td><td style=\"text-align:center;vertical-align:top\">..................<br>Received Date</td><td style=\"text-align:center;vertical-align:top\">..................<br>Company Seal</td></tr></table></div>",
+  "companies": [
+   {
+    "company": "Raindrop Inc. Private Limited",
+    "parent": "Estimate",
+    "parentfield": "companies",
+    "parenttype": "Document Template"
+   }
+  ],
+  "data_sources": [
+   {
+    "description": "Customer name and PAN",
+    "parent": "Estimate",
+    "parentfield": "data_sources",
+    "parenttype": "Document Template",
+    "query": "SELECT p.customer_name AS party_name, p.tax_id AS tax_id, a.address_line1 AS address\nFROM `tabCustomer` p LEFT JOIN `tabAddress` a ON a.name = p.customer_primary_address WHERE p.name = %(customer)s",
+    "source_name": "party",
+    "source_type": "SQL"
+   },
+   {
+    "description": "Opening and closing balance from GL",
+    "parent": "Estimate",
+    "parentfield": "data_sources",
+    "parenttype": "Document Template",
+    "query": "SELECT ABS(x.opening) AS opening_abs, IF(x.opening < 0, 'Cr', 'Dr') AS opening_side, ABS(x.closing) AS closing_abs, IF(x.closing < 0, 'Cr', 'Dr') AS closing_side FROM (\nSELECT COALESCE(SUM(CASE WHEN g.posting_date < %(from_date)s OR g.is_opening = 'Yes' THEN g.debit - g.credit END), 0) AS opening,\nCOALESCE(SUM(CASE WHEN g.posting_date <= %(to_date)s OR g.is_opening = 'Yes' THEN g.debit - g.credit END), 0) AS closing\nFROM `tabGL Entry` g WHERE g.is_cancelled = 0 AND g.company = %(company)s AND g.party_type = 'Customer' AND g.party = %(customer)s) x",
+    "source_name": "balances",
+    "source_type": "SQL"
+   },
+   {
+    "description": "Invoices in the fiscal year",
+    "parent": "Estimate",
+    "parentfield": "data_sources",
+    "parenttype": "Document Template",
+    "query": "SELECT CASE WHEN inv.name REGEXP '/[0-9]+-[0-9]+(-[0-9]+)?$' THEN CONCAT(LPAD(CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(SUBSTRING_INDEX(inv.name, '/', -1), '-', 2), '-', -1) AS UNSIGNED), GREATEST(3, CHAR_LENGTH(CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(SUBSTRING_INDEX(inv.name, '/', -1), '-', 2), '-', -1) AS UNSIGNED))), '0'), SUBSTRING(SUBSTRING_INDEX(inv.name, '/', -1), CHAR_LENGTH(SUBSTRING_INDEX(SUBSTRING_INDEX(inv.name, '/', -1), '-', 2)) + 1)) ELSE inv.name END AS invoice_no, inv.base_net_total AS taxable, inv.base_total_taxes_and_charges AS vat, inv.base_grand_total AS total FROM `tabSales Invoice` inv WHERE inv.docstatus = 1 AND inv.company = %(company)s AND inv.customer = %(customer)s AND inv.posting_date BETWEEN %(from_date)s AND %(to_date)s ORDER BY inv.posting_date, inv.name",
+    "source_name": "invoices",
+    "source_type": "SQL"
+   },
+   {
+    "description": "Invoice totals",
+    "parent": "Estimate",
+    "parentfield": "data_sources",
+    "parenttype": "Document Template",
+    "query": "SELECT COALESCE(SUM(inv.base_net_total), 0) AS taxable, COALESCE(SUM(inv.base_total_taxes_and_charges), 0) AS vat, COALESCE(SUM(inv.base_grand_total), 0) AS total FROM `tabSales Invoice` inv WHERE inv.docstatus = 1 AND inv.company = %(company)s AND inv.customer = %(customer)s AND inv.posting_date BETWEEN %(from_date)s AND %(to_date)s",
+    "source_name": "invoice_total",
+    "source_type": "SQL"
+   },
+   {
+    "description": "Formatted letter date",
+    "parent": "Estimate",
+    "parentfield": "data_sources",
+    "parenttype": "Document Template",
+    "query": "SELECT DATE_FORMAT(%(letter_date)s, '%%D %%M, %%Y') AS letter_date",
+    "source_name": "meta",
+    "source_type": "SQL"
+   }
+  ],
+  "default_recipient_field": "email_id",
+  "docstatus": 0,
+  "doctype": "Document Template",
+  "email_subject": "Account Confirmation - {{ company }}",
+  "footer_height": 6.0,
+  "footer_html": "<table style=\"width:100%;border-collapse:collapse\"><tr><td style=\"height:5px;width:50%;background:#176b87\"></td><td style=\"height:5px;background:#333\"></td></tr></table>",
+  "header_height": 36.0,
+  "header_html": "<table style=\"width:100%;border-collapse:collapse\"><tr><td style=\"vertical-align:top\">{% if org.logo %}<img src=\"{{ org.logo }}\" style=\"height:64px;max-width:240px\" alt=\"Company logo\">{% else %}<div style=\"display:inline-block;border:1px solid #1d2340;border-radius:4px;padding:8px 14px;font-size:27px;font-weight:bold;letter-spacing:1px;color:#10172e\">RAINDROP</div>{% endif %}</td><td style=\"text-align:right;font-size:9.5pt;line-height:1.5\"><b>Raindrop Inc Pvt Ltd<br>Nava Marg Lazimpat<br>29 - Kathmandu,Nepal</b><br>+977-14500027<br>info@raindropinc.com<br>www.raindropinc.com</td></tr></table>",
+  "inputs": [
+   {
+    "exclusive_group": null,
+    "exclusive_set": null,
+    "fieldname": "customer",
+    "input_type": "Link",
+    "label": "Customer",
+    "options": "Customer",
+    "parent": "Estimate",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 1
+   },
+   {
+    "exclusive_group": null,
+    "exclusive_set": null,
+    "fieldname": "fiscal_year",
+    "input_type": "Link",
+    "label": "Fiscal Year",
+    "options": "Fiscal Year",
+    "parent": "Estimate",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 1
+   },
+   {
+    "exclusive_group": null,
+    "exclusive_set": null,
+    "fieldname": "ref_no",
+    "input_type": "Data",
+    "label": "Ref No",
+    "options": null,
+    "parent": "Estimate",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 1
+   },
+   {
+    "exclusive_group": null,
+    "exclusive_set": null,
+    "fieldname": "letter_date",
+    "input_type": "Date",
+    "label": "Letter Date",
+    "options": null,
+    "parent": "Estimate",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 1
+   }
+  ],
+  "is_active": 1,
+  "letter_head": "Raindrop",
+  "modified": "2026-11-23 10:55:41.224468",
+  "name": "Estimate",
+  "print_orientation": "Portrait",
+  "target_doctype": null,
+  "template_name": "Estimate"
+ },
+ {
+  "body_html": "{% set d = data.dates.row %}{% set p = data.party.row %}{% set t = data.totals.row %}\n<div style=\"min-height:930px;margin-top:24px\">\n<table style=\"width:100%\"><tr><td style=\"width:55%;vertical-align:top\"><b style=\"letter-spacing:1px\">Issued to:</b><div style=\"margin-top:7px;line-height:1.6\">{{ p.party_name or '' }}<br>{{ inputs.customer_address or p.address or '' }}</div></td>\n<td style=\"vertical-align:top;text-align:right;line-height:1.9\"><b style=\"letter-spacing:1px\">Estimate No: &nbsp;&nbsp; {{ inputs.estimate_no or '' }}</b><br><span style=\"letter-spacing:1px\">Issued Date: &nbsp;&nbsp; {{ d.issued or '' }}</span></td></tr></table>\n<table style=\"width:100%;margin-top:34px;border-collapse:collapse\"><tr style=\"background:#00b2ca;color:#fff;font-weight:bold\"><td style=\"padding:11px;width:6%\">SN</td><td style=\"padding:11px\">Description</td><td style=\"padding:11px;width:8%;text-align:center\">Qty</td><td style=\"padding:11px;width:10%;text-align:center\">Unit</td><td style=\"padding:11px;width:14%;text-align:center\">Unit Price</td><td style=\"padding:11px;width:15%;text-align:right\">Total</td></tr>\n{% for r in data.lines.rows %}<tr style=\"page-break-inside:avoid\"><td style=\"padding:11px;text-align:center;vertical-align:middle\">{{ loop.index }}</td><td style=\"padding:11px;border-bottom:1px solid #ddd\"><b>{{ r.item_name }}</b><br>{{ r.item_description or '' }}</td><td style=\"padding:11px;border-bottom:1px solid #ddd;text-align:center\"><b>{{ r.qty_text }}</b></td><td style=\"padding:11px;border-bottom:1px solid #ddd;text-align:center\">{{ r.unit }}</td><td style=\"padding:11px;border-bottom:1px solid #ddd;text-align:center\">{{ money(r.rate) }}</td><td style=\"padding:11px;border-bottom:1px solid #ddd;text-align:right\">{{ money(r.amount) }}</td></tr>{% endfor %}\n</table></div>\n<div style=\"border-top:1px solid #ddd;margin-left:7%;padding-top:14px\"><table style=\"width:36%;margin-left:auto;line-height:1.9\"><tr><td><b>Total</b></td><td>:</td><td style=\"text-align:right\"><b>{{ money(t.total) }}</b></td></tr><tr><td>Discount</td><td>:</td><td style=\"text-align:right\">{% if t.discount %}{{ money(t.discount) }}{% else %}-{% endif %}</td></tr><tr><td>Taxable</td><td>:</td><td style=\"text-align:right\">{{ money(t.taxable) }}</td></tr><tr><td>VAT</td><td>:</td><td style=\"text-align:right\">{{ money(t.vat) }}</td></tr><tr><td><b>Grand Total</b></td><td><b>:</b></td><td style=\"text-align:right\"><b>{{ money(t.grand_total) }}</b></td></tr></table></div>\n<div style=\"text-align:right;margin-top:6px\">1/2</div>\n<div style=\"page-break-before:always\"></div>\n<div class=\"dg-est-p2\" style=\"min-height:1130px;padding-top:20px\">\n<div style=\"background:#00b2ca;color:#fff;font-weight:bold;padding:14px\">A.Terms Of Your Order</div>\n<div style=\"padding:16px 14px 12px\"><b>1.Agreement</b></div><hr style=\"border:0;border-top:1px solid #ddd;margin:0\">\n<div style=\"padding:18px 14px 8px\"><p style=\"margin:0 0 20px\">Except as expressly stated below, the terms and conditions of the application agreement between the customer and Raindrop (including any updated URL Terms or other applicable web-based terms in effect as of the date of this Estimate) shall apply to the products and/or sercives listed herein.</p><p style=\"margin:0 0 20px\">This Estimate is non-cancellable and all fees are non-refundable, unless explicitly stated otherwise in this document or in the Agreement.</p></div><hr style=\"border:0;border-top:1px solid #ddd;margin:0\">\n<div style=\"padding:30px 14px 12px\"><p style=\"margin:0 0 20px\"><b>2. Start Date</b><br>{{ d.start or '' }}</p><p style=\"margin:0 0 20px\"><b>3. Professional Service Payment Terms</b><br>Net 15</p><p style=\"margin:0 0 20px\"><b>4. Professional Services Payment Frequency</b><br>100% In Advance</p><p style=\"margin:0 0 20px\"><b>5. Currency</b><br>NPR</p><p style=\"margin:0 0 20px\"><b>6. Subscription Valid Through</b><br>{{ d.valid or '' }}</p><p style=\"margin:0 0 20px\"><b>7. Customer Reference</b><br>Raindrop may refer to You as a Raindrop Customer of the ordered Services in Sales Presentations, marketing materials and activities</p></div><hr style=\"border:0;border-top:1px solid #ddd;margin:0\">\n<p style=\"margin:72px 0 0\"><b>I AGREE TO THE FEES AND TERMS OF THIS AGREEMENT:</b></p>\n<table style=\"width:100%;margin-top:70px;text-align:center\"><tr><td style=\"width:30%;border-top:1px solid #000;padding-top:4px\">Print Name</td><td style=\"width:5%\"></td><td style=\"width:30%;border-top:1px solid #000;padding-top:4px\">Signature</td><td style=\"width:5%\"></td><td style=\"width:30%;border-top:1px solid #000;padding-top:4px\">Date</td></tr></table>\n<p style=\"margin:34px 0 16px\">Upon your execution, this document is a binding order for the products and services set forth herein.</p><p style=\"margin:0\">Raindrop Relies on the accuracy of the billing information listed above, and is unable to issue a credit memo or resubmit an invoice due to incorrect billing information listed. Please ensure your company name, addresses and contacts included on this document are correct.</p>\n</div><div style=\"text-align:right;margin-top:8px\">2/2</div><hr style=\"border:0;border-top:1px solid #ddd;margin:0\">",
+  "companies": [
+   {
+    "company": "Raindrop Inc. Private Limited",
+    "parent": "Estimate Chetak Engineering",
+    "parentfield": "companies",
+    "parenttype": "Document Template"
+   }
+  ],
+  "data_sources": [
+   {
+    "description": "Customer name and address",
+    "parent": "Estimate Chetak Engineering",
+    "parentfield": "data_sources",
+    "parenttype": "Document Template",
+    "query": "SELECT p.customer_name AS party_name, p.tax_id AS tax_id, a.address_line1 AS address\nFROM `tabCustomer` p LEFT JOIN `tabAddress` a ON a.name = p.customer_primary_address WHERE p.name = %(customer)s",
+    "source_name": "party",
+    "source_type": "SQL"
+   },
+   {
+    "description": "Estimate item rows",
+    "parent": "Estimate Chetak Engineering",
+    "parentfield": "data_sources",
+    "parenttype": "Document Template",
+    "query": "SELECT l.sn, l.item_name, l.item_description, l.unit, l.rate, l.qty * l.rate AS amount,\n    TRIM(TRAILING '.' FROM TRIM(TRAILING '0' FROM FORMAT(l.qty, 2, 'en_US'))) AS qty_text\nFROM (SELECT 1 AS sn, i.item_name,\n    COALESCE(NULLIF(%(description_1)s, ''), NULLIF(i.description, i.item_name), '') AS item_description,\n    COALESCE(NULLIF(%(qty_1)s, 0), 1) AS qty, 'Month' AS unit, COALESCE(%(rate_1)s, 0) AS rate\nFROM `tabItem` i WHERE i.name = %(item_1)s\nUNION ALL\nSELECT 2 AS sn, i.item_name,\n    COALESCE(NULLIF(%(description_2)s, ''), NULLIF(i.description, i.item_name), '') AS item_description,\n    COALESCE(NULLIF(%(qty_2)s, 0), 1) AS qty, 'Month' AS unit, COALESCE(%(rate_2)s, 0) AS rate\nFROM `tabItem` i WHERE i.name = %(item_2)s\nUNION ALL\nSELECT 3 AS sn, i.item_name,\n    COALESCE(NULLIF(%(description_3)s, ''), NULLIF(i.description, i.item_name), '') AS item_description,\n    COALESCE(NULLIF(%(qty_3)s, 0), 1) AS qty, 'Month' AS unit, COALESCE(%(rate_3)s, 0) AS rate\nFROM `tabItem` i WHERE i.name = %(item_3)s) l ORDER BY l.sn",
+    "source_name": "lines",
+    "source_type": "SQL"
+   },
+   {
+    "description": "Total, discount, taxable, VAT 13% and grand total",
+    "parent": "Estimate Chetak Engineering",
+    "parentfield": "data_sources",
+    "parenttype": "Document Template",
+    "query": "SELECT x.total, x.discount, x.total - x.discount AS taxable,\n    ROUND((x.total - x.discount) * 0.13, 2) AS vat,\n    ROUND((x.total - x.discount) * 1.13, 2) AS grand_total\nFROM (SELECT COALESCE(SUM(l.qty * l.rate), 0) AS total, COALESCE(%(discount)s, 0) AS discount FROM (SELECT 1 AS sn, i.item_name,\n    COALESCE(NULLIF(%(description_1)s, ''), NULLIF(i.description, i.item_name), '') AS item_description,\n    COALESCE(NULLIF(%(qty_1)s, 0), 1) AS qty, 'Month' AS unit, COALESCE(%(rate_1)s, 0) AS rate\nFROM `tabItem` i WHERE i.name = %(item_1)s\nUNION ALL\nSELECT 2 AS sn, i.item_name,\n    COALESCE(NULLIF(%(description_2)s, ''), NULLIF(i.description, i.item_name), '') AS item_description,\n    COALESCE(NULLIF(%(qty_2)s, 0), 1) AS qty, 'Month' AS unit, COALESCE(%(rate_2)s, 0) AS rate\nFROM `tabItem` i WHERE i.name = %(item_2)s\nUNION ALL\nSELECT 3 AS sn, i.item_name,\n    COALESCE(NULLIF(%(description_3)s, ''), NULLIF(i.description, i.item_name), '') AS item_description,\n    COALESCE(NULLIF(%(qty_3)s, 0), 1) AS qty, 'Month' AS unit, COALESCE(%(rate_3)s, 0) AS rate\nFROM `tabItem` i WHERE i.name = %(item_3)s) l) x",
+    "source_name": "totals",
+    "source_type": "SQL"
+   },
+   {
+    "description": "Formatted dates",
+    "parent": "Estimate Chetak Engineering",
+    "parentfield": "data_sources",
+    "parenttype": "Document Template",
+    "query": "SELECT UPPER(DATE_FORMAT(%(issue_date)s, '%%d %%b %%Y')) AS issued, CONCAT(DAY(%(start_date)s), '<sup>', RIGHT(DATE_FORMAT(%(start_date)s, '%%D'), 2), '</sup> ', UPPER(DATE_FORMAT(%(start_date)s, '%%b, %%Y'))) AS start, CONCAT(DAY(%(valid_through)s), '<sup>', RIGHT(DATE_FORMAT(%(valid_through)s, '%%D'), 2), '</sup> ', UPPER(DATE_FORMAT(%(valid_through)s, '%%b, %%Y'))) AS valid",
+    "source_name": "dates",
+    "source_type": "SQL"
+   }
+  ],
+  "default_recipient_field": "email_id",
+  "docstatus": 0,
+  "doctype": "Document Template",
+  "email_subject": "Estimate - {{ company }}",
+  "footer_height": 15.0,
+  "footer_html": "",
+  "header_height": 42.0,
+  "header_html": "<style>.dg-est-p2{min-height:1270px !important}</style><table style=\"width:100%;border-collapse:collapse\"><tr><td style=\"vertical-align:top\">{% if org.logo %}<img src=\"{{ org.logo }}\" style=\"height:64px;max-width:240px\" alt=\"Company logo\">{% else %}<div style=\"display:inline-block;border:1px solid #1d2340;border-radius:4px;padding:8px 14px;font-size:27px;font-weight:bold;letter-spacing:1px;color:#10172e\">RAINDROP</div>{% endif %}\n<div style=\"margin-top:12px;font-weight:bold;font-size:10.5pt;line-height:1.5\">Raindrop Inc. Pvt. Ltd.<br>Lazimpat-02, Kathmandu.<br>Tax ID: {{ org.vat }}</div></td>\n<td style=\"vertical-align:top;text-align:right;font-size:25px;font-weight:bold;letter-spacing:3px\">ESTIMATE</td></tr></table>",
+  "inputs": [
+   {
+    "exclusive_group": null,
+    "exclusive_set": null,
+    "fieldname": "customer",
+    "input_type": "Link",
+    "label": "Customer",
+    "options": "Customer",
+    "parent": "Estimate Chetak Engineering",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 1
+   },
+   {
+    "exclusive_group": null,
+    "exclusive_set": null,
+    "fieldname": "customer_address",
+    "input_type": "Data",
+    "label": "Customer Address (optional)",
+    "options": null,
+    "parent": "Estimate Chetak Engineering",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 0
+   },
+   {
+    "exclusive_group": null,
+    "exclusive_set": null,
+    "fieldname": "estimate_no",
+    "input_type": "Data",
+    "label": "Estimate No",
+    "options": null,
+    "parent": "Estimate Chetak Engineering",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 1
+   },
+   {
+    "exclusive_group": null,
+    "exclusive_set": null,
+    "fieldname": "issue_date",
+    "input_type": "Date",
+    "label": "Issued Date",
+    "options": null,
+    "parent": "Estimate Chetak Engineering",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 1
+   },
+   {
+    "exclusive_group": null,
+    "exclusive_set": null,
+    "fieldname": "start_date",
+    "input_type": "Date",
+    "label": "Start Date",
+    "options": null,
+    "parent": "Estimate Chetak Engineering",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 0
+   },
+   {
+    "exclusive_group": null,
+    "exclusive_set": null,
+    "fieldname": "valid_through",
+    "input_type": "Date",
+    "label": "Subscription Valid Through",
+    "options": null,
+    "parent": "Estimate Chetak Engineering",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 0
+   },
+   {
+    "exclusive_group": null,
+    "exclusive_set": null,
+    "fieldname": "discount",
+    "input_type": "Float",
+    "label": "Discount Amount",
+    "options": null,
+    "parent": "Estimate Chetak Engineering",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 0
+   },
+   {
+    "exclusive_group": null,
+    "exclusive_set": null,
+    "fieldname": "item_1",
+    "input_type": "Link",
+    "label": "Item 1",
+    "options": "Item",
+    "parent": "Estimate Chetak Engineering",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 1
+   },
+   {
+    "exclusive_group": null,
+    "exclusive_set": null,
+    "fieldname": "description_1",
+    "input_type": "Data",
+    "label": "Description 1",
+    "options": null,
+    "parent": "Estimate Chetak Engineering",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 0
+   },
+   {
+    "exclusive_group": null,
+    "exclusive_set": null,
+    "fieldname": "qty_1",
+    "input_type": "Float",
+    "label": "Qty 1",
+    "options": null,
+    "parent": "Estimate Chetak Engineering",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 1
+   },
+   {
+    "exclusive_group": null,
+    "exclusive_set": null,
+    "fieldname": "rate_1",
+    "input_type": "Float",
+    "label": "Unit Price 1",
+    "options": null,
+    "parent": "Estimate Chetak Engineering",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 1
+   },
+   {
+    "exclusive_group": null,
+    "exclusive_set": null,
+    "fieldname": "item_2",
+    "input_type": "Link",
+    "label": "Item 2",
+    "options": "Item",
+    "parent": "Estimate Chetak Engineering",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 0
+   },
+   {
+    "exclusive_group": null,
+    "exclusive_set": null,
+    "fieldname": "description_2",
+    "input_type": "Data",
+    "label": "Description 2",
+    "options": null,
+    "parent": "Estimate Chetak Engineering",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 0
+   },
+   {
+    "exclusive_group": null,
+    "exclusive_set": null,
+    "fieldname": "qty_2",
+    "input_type": "Float",
+    "label": "Qty 2",
+    "options": null,
+    "parent": "Estimate Chetak Engineering",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 0
+   },
+   {
+    "exclusive_group": null,
+    "exclusive_set": null,
+    "fieldname": "rate_2",
+    "input_type": "Float",
+    "label": "Unit Price 2",
+    "options": null,
+    "parent": "Estimate Chetak Engineering",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 0
+   },
+   {
+    "exclusive_group": null,
+    "exclusive_set": null,
+    "fieldname": "item_3",
+    "input_type": "Link",
+    "label": "Item 3",
+    "options": "Item",
+    "parent": "Estimate Chetak Engineering",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 0
+   },
+   {
+    "exclusive_group": null,
+    "exclusive_set": null,
+    "fieldname": "description_3",
+    "input_type": "Data",
+    "label": "Description 3",
+    "options": null,
+    "parent": "Estimate Chetak Engineering",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 0
+   },
+   {
+    "exclusive_group": null,
+    "exclusive_set": null,
+    "fieldname": "qty_3",
+    "input_type": "Float",
+    "label": "Qty 3",
+    "options": null,
+    "parent": "Estimate Chetak Engineering",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 0
+   },
+   {
+    "exclusive_group": null,
+    "exclusive_set": null,
+    "fieldname": "rate_3",
+    "input_type": "Float",
+    "label": "Unit Price 3",
+    "options": null,
+    "parent": "Estimate Chetak Engineering",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 0
+   }
+  ],
+  "is_active": 1,
+  "letter_head": "Raindrop",
+  "modified": "2026-11-23 10:34:00.289124",
+  "name": "Estimate Chetak Engineering",
+  "print_orientation": "Portrait",
+  "target_doctype": null,
+  "template_name": "Estimate Chetak Engineering"
+ },
+ {
   "body_html": "{% set p = data.party.row %}\n{% set b = data.balances.row %}\n{% set t = data.txn.row %}\n{% set fy_label = ('FY ' ~ inputs.fiscal_year) if inputs.fiscal_year else (bs(inputs.from_date) ~ ' to ' ~ bs(inputs.to_date)) %}\n\n<div style=\"font-family:'Times New Roman',serif;font-size:14px;color:#000;line-height:1.5\">\n\n  <div style=\"text-align:right;margin-bottom:10px\">Date: {{ today_bs }}</div>\n\n  <div style=\"margin-bottom:12px\">\n    <div>To,</div>\n    <div style=\"font-weight:bold\">{{ p.party_name }}</div>\n    {% if p.address %}<div style=\"white-space:pre-line\">{{ p.address }}</div>{% endif %}\n    {% if p.tax_id %}<div>VAT/PAN: {{ p.tax_id }}</div>{% endif %}\n  </div>\n\n  <div style=\"text-align:center;margin:14px 0;font-weight:bold;text-decoration:underline\">\n    Subject: Transaction &amp; Balance Confirmation of {{ fy_label }}\n  </div>\n\n  <div style=\"margin-bottom:10px\">Dear Sir/Madam,</div>\n\n  <div style=\"margin-bottom:12px;text-align:justify\">\n    This is in reference to the transactions completed by our company with your company/firm\n    during {{ fy_label }}. The records of our company show the following transactions and balance\n    for your confirmation:\n  </div>\n\n  <table style=\"width:100%;border-collapse:collapse;text-align:center;font-size:13px;margin-bottom:14px\">\n    <thead>\n      <tr style=\"background:#f2f2f2\">\n        <th style=\"border:1px solid #000;padding:6px\">Opening Balance</th>\n        <th style=\"border:1px solid #000;padding:6px\">Taxable Purchase<br><span style=\"font-weight:normal\">(Excl. VAT)</span></th>\n        <th style=\"border:1px solid #000;padding:6px\">VAT @13%</th>\n        <th style=\"border:1px solid #000;padding:6px\">TDS</th>\n        <th style=\"border:1px solid #000;padding:6px\">Total Amount</th>\n        <th style=\"border:1px solid #000;padding:6px\">Closing Balance</th>\n      </tr>\n    </thead>\n    <tbody>\n      <tr>\n        <td style=\"border:1px solid #000;padding:6px\">{{ money(b.opening) }}</td>\n        <td style=\"border:1px solid #000;padding:6px\">{{ money(t.taxable) }}</td>\n        <td style=\"border:1px solid #000;padding:6px\">{{ money(t.vat) }}</td>\n        <td style=\"border:1px solid #000;padding:6px\">{{ money(t.tds) }}</td>\n        <td style=\"border:1px solid #000;padding:6px\">{{ money(t.total) }}</td>\n        <td style=\"border:1px solid #000;padding:6px\">{{ money(b.closing) }}</td>\n      </tr>\n    </tbody>\n  </table>\n\n  <div style=\"margin-bottom:30px;text-align:justify\">\n    Please confirm the above mentioned transaction and balance within 7 days of receipt of this\n    letter and provide us with the copy of verified statement. Otherwise we shall consider the\n    above figure as accepted. Your kind cooperation in this respect shall be highly appreciated.\n  </div>\n\n  <div>Thank you.</div>\n\n  <table style=\"width:100%;border-collapse:collapse;margin-top:50px;font-size:13px\">\n    <tr style=\"vertical-align:top\">\n      <td style=\"width:50%;vertical-align:top\">\n        <div>Yours faithfully,</div>\n        <div style=\"min-height:118px\">\n          {% if user.signature %}<img src=\"{{ user.signature }}\" style=\"max-height:80px;margin:4px 14px 4px 0;vertical-align:bottom\">{% endif %}\n          {% if org.stamp %}<img src=\"{{ org.stamp }}\" style=\"max-height:75px;margin:4px 0;vertical-align:bottom\">{% endif %}\n        </div>\n        <div>(Stamp &amp; Signature)</div>\n        <div style=\"font-weight:bold;margin-top:6px\">{{ user.full_name }}</div>\n        <div>{% if user.designation %}{{ user.designation }}{% else %}&nbsp;{% endif %}</div>\n        <div>{{ org.company_name }}</div>\n        {% if org.vat %}<div>VAT No.: {{ org.vat }}</div>{% endif %}\n      </td>\n      <td style=\"width:50%;text-align:right;vertical-align:top\">\n        <div style=\"display:inline-block;text-align:left\">\n        <div>Confirmed by:</div>\n        <div style=\"height:80px\"></div>\n        <div>(Stamp &amp; Signature)</div>\n        <div style=\"margin-top:6px\">Authorized For,</div>\n        <div style=\"font-weight:bold\">{{ p.party_name }}</div>\n        <div style=\"margin-top:16px\">Date: ____/____/________</div>\n        <div style=\"margin-top:14px\">Name: ____________________</div>\n        <div style=\"margin-top:14px\">Contact No.: ______________</div>\n        </div>\n      </td>\n    </tr>\n  </table>\n\n</div>",
   "companies": [],
   "data_sources": [
