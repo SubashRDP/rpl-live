@@ -242,3 +242,20 @@ app_license = "mit"
 # 	"Logging DocType Name": 30  # days to retain logs
 # }
 
+# Document Generator starter templates. Scoped by name so migrate only updates
+# these records and never touches templates added from the desk.
+fixtures = [
+	{
+		"doctype": "Document Template",
+		"filters": {
+			"name": [
+				"in",
+				[
+					"Customer Balance Confirmation",
+					"Customer/Supplier Balance Confirmation",
+					"Vendor Balance Confirmation",
+				],
+			]
+		},
+	},
+]

@@ -1,0 +1,332 @@
+[
+ {
+  "body_html": "{% set p = data.party.row %}\n{% set b = data.balances.row %}\n{% set t = data.txn.row %}\n{% set fy_label = ('FY ' ~ inputs.fiscal_year) if inputs.fiscal_year else (bs(inputs.from_date) ~ ' to ' ~ bs(inputs.to_date)) %}\n\n<div style=\"font-family:'Times New Roman',serif;font-size:14px;color:#000;line-height:1.5\">\n\n  <div style=\"text-align:right;margin-bottom:10px\">Date: {{ today_bs }}</div>\n\n  <div style=\"margin-bottom:12px\">\n    <div>To,</div>\n    <div style=\"font-weight:bold\">{{ p.party_name }}</div>\n    {% if p.address %}<div style=\"white-space:pre-line\">{{ p.address }}</div>{% endif %}\n    {% if p.tax_id %}<div>VAT/PAN: {{ p.tax_id }}</div>{% endif %}\n  </div>\n\n  <div style=\"text-align:center;margin:14px 0;font-weight:bold;text-decoration:underline\">\n    Subject: Transaction &amp; Balance Confirmation of {{ fy_label }}\n  </div>\n\n  <div style=\"margin-bottom:10px\">Dear Sir/Madam,</div>\n\n  <div style=\"margin-bottom:12px;text-align:justify\">\n    This is in reference to the transactions completed by our company with your company/firm\n    during {{ fy_label }}. The records of our company show the following transactions and balance\n    for your confirmation:\n  </div>\n\n  <table style=\"width:100%;border-collapse:collapse;text-align:center;font-size:13px;margin-bottom:14px\">\n    <thead>\n      <tr style=\"background:#f2f2f2\">\n        <th style=\"border:1px solid #000;padding:6px\">Opening Balance</th>\n        <th style=\"border:1px solid #000;padding:6px\">Taxable Sales<br><span style=\"font-weight:normal\">(Excl. VAT)</span></th>\n        <th style=\"border:1px solid #000;padding:6px\">VAT @13%</th>\n        <th style=\"border:1px solid #000;padding:6px\">Total Amount</th>\n        <th style=\"border:1px solid #000;padding:6px\">Closing Balance</th>\n      </tr>\n    </thead>\n    <tbody>\n      <tr>\n        <td style=\"border:1px solid #000;padding:6px\">{{ money(b.opening) }}</td>\n        <td style=\"border:1px solid #000;padding:6px\">{{ money(t.taxable) }}</td>\n        <td style=\"border:1px solid #000;padding:6px\">{{ money(t.vat) }}</td>\n        <td style=\"border:1px solid #000;padding:6px\">{{ money(t.total) }}</td>\n        <td style=\"border:1px solid #000;padding:6px\">{{ money(b.closing) }}</td>\n      </tr>\n    </tbody>\n  </table>\n\n  <div style=\"margin-bottom:30px;text-align:justify\">\n    Please confirm the above mentioned transaction and balance within 7 days of receipt of this\n    letter and provide us with the copy of verified statement. Otherwise we shall consider the\n    above figure as accepted. Your kind cooperation in this respect shall be highly appreciated.\n  </div>\n\n  <div>Thank you for your cooperation.</div>\n\n  <table style=\"width:100%;border-collapse:collapse;margin-top:50px;font-size:13px\">\n    <tr style=\"vertical-align:top\">\n      <td style=\"width:50%;vertical-align:top\">\n        <div>Yours faithfully,</div>\n        <div style=\"min-height:118px\">\n          {% if user.signature %}<img src=\"{{ user.signature }}\" style=\"max-height:80px;margin:4px 14px 4px 0;vertical-align:bottom\">{% endif %}\n          {% if org.stamp %}<img src=\"{{ org.stamp }}\" style=\"max-height:75px;margin:4px 0;vertical-align:bottom\">{% endif %}\n        </div>\n        <div>(Stamp &amp; Signature)</div>\n        <div style=\"font-weight:bold;margin-top:6px\">{{ user.full_name }}</div>\n        <div>{% if user.designation %}{{ user.designation }}{% else %}&nbsp;{% endif %}</div>\n        <div>{{ org.company_name }}</div>\n        {% if org.vat %}<div>VAT No.: {{ org.vat }}</div>{% endif %}\n      </td>\n      <td style=\"width:50%;text-align:right;vertical-align:top\">\n        <div style=\"display:inline-block;text-align:left\">\n        <div>Confirmed by:</div>\n        <div style=\"height:80px\"></div>\n        <div>(Stamp &amp; Signature)</div>\n        <div style=\"margin-top:6px\">Authorized For,</div>\n        <div style=\"font-weight:bold\">{{ p.party_name }}</div>\n        <div style=\"margin-top:16px\">Date: ____/____/________</div>\n        <div style=\"margin-top:14px\">Name: ____________________</div>\n        <div style=\"margin-top:14px\">Contact No.: ______________</div>\n        </div>\n      </td>\n    </tr>\n  </table>\n\n</div>",
+  "companies": [],
+  "data_sources": [
+   {
+    "description": "Customer name, tax id (VAT/PAN) and primary address.",
+    "parent": "Customer Balance Confirmation",
+    "parentfield": "data_sources",
+    "parenttype": "Document Template",
+    "query": "SELECT p.customer_name AS party_name, p.tax_id AS tax_id, a.address_line1 AS address\nFROM `tabCustomer` p\n    LEFT JOIN `tabAddress` a ON a.name = p.customer_primary_address\nWHERE p.name = %(customer)s",
+    "source_name": "party",
+    "source_type": "SQL"
+   },
+   {
+    "description": "Opening / closing balance from GL Entry.",
+    "parent": "Customer Balance Confirmation",
+    "parentfield": "data_sources",
+    "parenttype": "Document Template",
+    "query": "SELECT\n    COALESCE(SUM(CASE WHEN gle.posting_date < %(from_date)s\n                       OR gle.is_opening = 'Yes'\n                      THEN gle.debit - gle.credit END), 0)  AS opening,\n    COALESCE(SUM(CASE WHEN gle.posting_date <= %(to_date)s\n                       OR gle.is_opening = 'Yes'\n                      THEN gle.debit - gle.credit END), 0)  AS closing\nFROM `tabGL Entry` gle\nWHERE gle.is_cancelled = 0\n  AND gle.company = %(company)s\n  AND gle.party_type = 'Customer'\n  AND gle.party = %(customer)s",
+    "source_name": "balances",
+    "source_type": "SQL"
+   },
+   {
+    "description": "Period taxable, VAT and total from Sales Invoice.",
+    "parent": "Customer Balance Confirmation",
+    "parentfield": "data_sources",
+    "parenttype": "Document Template",
+    "query": "SELECT\n    COALESCE(SUM(inv.base_net_total), 0)                AS taxable,\n    COALESCE(SUM(inv.base_total_taxes_and_charges), 0)  AS vat,\n    0                                                   AS tds,\n    COALESCE(SUM(inv.base_grand_total), 0)              AS total\nFROM `tabSales Invoice` inv\nWHERE inv.docstatus = 1\n  AND inv.company = %(company)s\n  AND inv.customer = %(customer)s\n  AND inv.posting_date BETWEEN %(from_date)s AND %(to_date)s",
+    "source_name": "txn",
+    "source_type": "SQL"
+   },
+   {
+    "description": "Company phone / email / website for the footer.",
+    "parent": "Customer Balance Confirmation",
+    "parentfield": "data_sources",
+    "parenttype": "Document Template",
+    "query": "SELECT phone_no, email, website FROM `tabCompany` WHERE name = %(company)s",
+    "source_name": "contact",
+    "source_type": "SQL"
+   }
+  ],
+  "default_recipient_field": "email_id",
+  "docstatus": 0,
+  "doctype": "Document Template",
+  "email_subject": "Transaction & Balance Confirmation - {{ company }}",
+  "footer_height": 16.0,
+  "footer_html": "<hr style=\"border:none;border-top:1px solid #000;margin:0 0 3px 0\">\n<div style=\"text-align:center;font-size:10px;color:#333;font-family:'Times New Roman',serif\">\n  {% set ct = data.contact.row %}\n  {% if ct.phone_no %}Tel: {{ ct.phone_no }}{% endif %}\n  {% if ct.email %}&nbsp;&nbsp;|&nbsp;&nbsp;E-mail: {{ ct.email }}{% endif %}\n  {% if ct.website %}&nbsp;&nbsp;|&nbsp;&nbsp;{{ ct.website }}{% endif %}\n</div>",
+  "header_height": 32.0,
+  "header_html": "<div style=\"font-family:'Times New Roman',serif\">\n  {% if org.logo %}<div style=\"text-align:right;margin-top:2px\"><img src=\"{{ org.logo }}\" style=\"width:175px;height:52px;object-fit:contain;display:inline-block\" alt=\"Company logo\"></div>{% endif %}\n  <table style=\"width:100%;border-collapse:collapse;margin-top:8px\">\n    <tr>\n      <td style=\"width:78%;height:7px;padding:0;background-color:#0b243d;-webkit-print-color-adjust:exact\"></td>\n      <td style=\"height:7px;padding:0;background-color:#ec4c25;-webkit-print-color-adjust:exact\"></td>\n    </tr>\n  </table>\n</div>",
+  "inputs": [
+   {
+    "exclusive_group": null,
+    "exclusive_set": null,
+    "fieldname": "customer",
+    "input_type": "Link",
+    "label": "Customer",
+    "options": "Customer",
+    "parent": "Customer Balance Confirmation",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 1
+   },
+   {
+    "exclusive_group": "fy",
+    "exclusive_set": "period",
+    "fieldname": "fiscal_year",
+    "input_type": "Link",
+    "label": "Fiscal Year",
+    "options": "Fiscal Year",
+    "parent": "Customer Balance Confirmation",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 1
+   },
+   {
+    "exclusive_group": "range",
+    "exclusive_set": "period",
+    "fieldname": "from_date",
+    "input_type": "Date",
+    "label": "From Date",
+    "options": null,
+    "parent": "Customer Balance Confirmation",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 1
+   },
+   {
+    "exclusive_group": "range",
+    "exclusive_set": "period",
+    "fieldname": "to_date",
+    "input_type": "Date",
+    "label": "To Date",
+    "options": null,
+    "parent": "Customer Balance Confirmation",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 1
+   }
+  ],
+  "is_active": 1,
+  "letter_head": null,
+  "modified": "2026-11-23 12:00:00.000000",
+  "name": "Customer Balance Confirmation",
+  "print_orientation": "Portrait",
+  "target_doctype": null,
+  "template_name": "Customer Balance Confirmation"
+ },
+ {
+  "body_html": "{% set p = data.party.row %}\n{% set b = data.balances.row %}\n{% set s = data.sales.row %}\n{% set pu = data.purchase.row %}\n{# Balance with Dr/Cr: positive = they owe us (Dr), negative = we owe them (Cr). #}\n{% macro drcr(v) %}{% set m = money(v) %}{{ m.replace('-', '') }}{% if m.startswith('-') %} Cr{% elif m != '0.00' %} Dr{% endif %}{% endmacro %}\n{% set fy_label = ('FY ' ~ inputs.fiscal_year) if inputs.fiscal_year else (bs(inputs.from_date) ~ ' to ' ~ bs(inputs.to_date)) %}\n{# Used inside the table rows: \"Sales for the Fiscal Year 82/83\" / \"Sales for the period X to Y\". #}\n{% set period = ('the Fiscal Year ' ~ inputs.fiscal_year) if inputs.fiscal_year else ('the period ' ~ bs(inputs.from_date) ~ ' to ' ~ bs(inputs.to_date)) %}\n\n<div style=\"font-family:'Times New Roman',serif;font-size:14px;color:#000;line-height:1.4\">\n\n  <div style=\"text-align:right;margin-bottom:6px\">Date: {{ today_bs }}</div>\n\n  <div style=\"margin-bottom:8px\">\n    <div>To,</div>\n    <div style=\"font-weight:bold\">{{ p.party_name or '' }}</div>\n    {% if p.address %}<div style=\"white-space:pre-line\">{{ p.address }}</div>{% endif %}\n    {% if p.tax_id %}<div>VAT/PAN: {{ p.tax_id }}</div>{% endif %}\n  </div>\n\n  <div style=\"text-align:center;margin:10px 0;font-weight:bold;text-decoration:underline\">\n    Subject: Transaction &amp; Balance Confirmation of {{ fy_label }}\n  </div>\n\n  <div style=\"margin-bottom:6px\">Dear Sir/Madam,</div>\n\n  <div style=\"margin-bottom:10px;text-align:justify\">\n    This is in reference to the transactions completed by our company with your company/firm\n    during {{ fy_label }}. The records of our company show the following transactions and balance\n    for your confirmation:\n  </div>\n\n  <div style=\"font-weight:bold;margin-bottom:3px\">Net Sales, Credit Notes, Purchases, and Debit Notes as follows:</div>\n  <table style=\"width:100%;border-collapse:collapse;font-size:13px;margin-bottom:10px\">\n    <thead>\n      <tr>\n        <th style=\"border:1px solid #000;padding:3px 6px;background:#f2f2f2;width:6%\">S.N.</th>\n        <th style=\"border:1px solid #000;padding:3px 6px;background:#f2f2f2\">Particulars</th>\n        <th style=\"border:1px solid #000;padding:3px 6px;background:#f2f2f2;width:16%\">Taxable Amount</th>\n        <th style=\"border:1px solid #000;padding:3px 6px;background:#f2f2f2;width:14%\">VAT</th>\n        <th style=\"border:1px solid #000;padding:3px 6px;background:#f2f2f2;width:16%\">Total with VAT</th>\n      </tr>\n    </thead>\n    <tbody>\n      <tr>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:center\">1</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:left\">Sales for {{ period }}</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:right\">{{ money(s.taxable) }}</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:right\">{{ money(s.vat) }}</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:right\">{{ money(s.total) }}</td>\n      </tr>\n      <tr>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:center\">2</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:left\">Sales Return during the year (Credit Note)</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:right\">{{ money(s.ret_taxable) }}</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:right\">{{ money(s.ret_vat) }}</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:right\">{{ money(s.ret_total) }}</td>\n      </tr>\n      <tr style=\"font-weight:bold\">\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:center\">3</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:left\">Net Sales for {{ period }}</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:right\">{{ money(s.net_taxable) }}</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:right\">{{ money(s.net_vat) }}</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:right\">{{ money(s.net_total) }}</td>\n      </tr>\n      <tr>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:center\">4</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:left\">Purchase for {{ period }}</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:right\">{{ money(pu.taxable) }}</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:right\">{{ money(pu.vat) }}</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:right\">{{ money(pu.total) }}</td>\n      </tr>\n      <tr>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:center\">5</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:left\">Purchase Return during the year (Debit Note)</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:right\">{{ money(pu.ret_taxable) }}</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:right\">{{ money(pu.ret_vat) }}</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:right\">{{ money(pu.ret_total) }}</td>\n      </tr>\n      <tr style=\"font-weight:bold\">\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:center\">6</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:left\">Net Purchase for {{ period }}</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:right\">{{ money(pu.net_taxable) }}</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:right\">{{ money(pu.net_vat) }}</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:right\">{{ money(pu.net_total) }}</td>\n      </tr>\n    </tbody>\n  </table>\n\n  <div style=\"font-weight:bold;margin-bottom:3px\">Account Summary as follows:</div>\n  <table style=\"width:50%;border-collapse:collapse;font-size:13px;margin-bottom:10px\">\n    <thead>\n      <tr>\n        <th style=\"border:1px solid #000;padding:3px 6px;background:#f2f2f2;text-align:left\">Particulars</th>\n        <th style=\"border:1px solid #000;padding:3px 6px;background:#f2f2f2;text-align:right\">Total Amount</th>\n      </tr>\n    </thead>\n    <tbody>\n      <tr>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:left\">Opening Balance</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:right\">{{ drcr(b.opening) }}</td>\n      </tr>\n      <tr>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:left\">Total Sales</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:right\">{{ money(s.total) }}</td>\n      </tr>\n      <tr>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:left\">Total Credit Note</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:right\">{{ money(s.ret_total) }}</td>\n      </tr>\n      <tr>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:left\">Total Purchase</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:right\">{{ money(pu.total) }}</td>\n      </tr>\n      <tr>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:left\">Total Debit Note</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:right\">{{ money(pu.ret_total) }}</td>\n      </tr>\n      <tr style=\"font-weight:bold\">\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:left\">Closing Balance</td>\n        <td style=\"border:1px solid #000;padding:3px 6px;text-align:right\">{{ drcr(b.closing) }}</td>\n      </tr>\n    </tbody>\n  </table>\n\n  <div style=\"margin-bottom:10px;text-align:justify\">\n    Please confirm the above mentioned transaction and balance within 7 days of receipt of this\n    letter and provide us with the copy of verified statement. Otherwise we shall consider the\n    above figure as accepted. Your kind cooperation in this respect shall be highly appreciated.\n  </div>\n\n  <div>Thank you for your cooperation.</div>\n\n  <table style=\"width:100%;border-collapse:collapse;margin-top:16px;font-size:13px;page-break-inside:avoid\">\n    <tr style=\"vertical-align:top\">\n      <td style=\"width:50%;vertical-align:top\">\n        <div>Yours faithfully,</div>\n        <div style=\"min-height:60px\">\n          {% if user.signature %}<img src=\"{{ user.signature }}\" style=\"max-height:55px;margin:2px 14px 2px 0;vertical-align:bottom\">{% endif %}\n          {% if org.stamp %}<img src=\"{{ org.stamp }}\" style=\"max-height:55px;margin:2px 0;vertical-align:bottom\">{% endif %}\n        </div>\n        <div>(Stamp &amp; Signature)</div>\n        <div style=\"font-weight:bold;margin-top:4px\">{{ user.full_name }}</div>\n        <div>{% if user.designation %}{{ user.designation }}{% else %}&nbsp;{% endif %}</div>\n        <div>{{ org.company_name }}</div>\n        {% if org.vat %}<div>VAT No.: {{ org.vat }}</div>{% endif %}\n      </td>\n      <td style=\"width:50%;text-align:right;vertical-align:top\">\n        <div style=\"display:inline-block;text-align:left\">\n        <div>Confirmed by:</div>\n        <div style=\"height:60px\"></div>\n        <div>(Stamp &amp; Signature)</div>\n        <div style=\"margin-top:4px\">Authorized For,</div>\n        <div style=\"font-weight:bold\">{{ p.party_name or '' }}</div>\n        <div style=\"margin-top:10px\">Date: ____/____/________</div>\n        <div style=\"margin-top:10px\">Name: ____________________</div>\n        <div style=\"margin-top:10px\">Contact No.: ______________</div>\n        </div>\n      </td>\n    </tr>\n  </table>\n\n</div>\n",
+  "companies": [],
+  "data_sources": [
+   {
+    "description": "Name, VAT/PAN, address for the To block: the first picked Customer, else the first picked Supplier.",
+    "parent": "Customer/Supplier Balance Confirmation",
+    "parentfield": "data_sources",
+    "parenttype": "Document Template",
+    "query": "SELECT x.party_name, x.tax_id, x.address\nFROM (\n    SELECT 1 AS sort_order, p.customer_name AS party_name, p.tax_id AS tax_id, a.address_line1 AS address\n    FROM `tabCustomer` p\n        LEFT JOIN `tabAddress` a ON a.name = p.customer_primary_address\n    WHERE p.name IN %(party_customers)s\n    UNION ALL\n    SELECT 2 AS sort_order, p.supplier_name AS party_name, p.tax_id AS tax_id, a.address_line1 AS address\n    FROM `tabSupplier` p\n        LEFT JOIN `tabAddress` a ON a.name = p.supplier_primary_address\n    WHERE p.name IN %(party_suppliers)s\n) x\nORDER BY x.sort_order\nLIMIT 1\n-- %(party_customers)s / %(party_suppliers)s = plain names of the picked Customers / Suppliers\n-- (built from the \"Name (Customer)\" / \"Name (Supplier)\" picks, NULL when none picked).",
+    "source_name": "party",
+    "source_type": "SQL"
+   },
+   {
+    "description": "Opening / closing balance from GL Entry: all picked Customers + Suppliers together (positive = Dr, negative = Cr).",
+    "parent": "Customer/Supplier Balance Confirmation",
+    "parentfield": "data_sources",
+    "parenttype": "Document Template",
+    "query": "SELECT\n    COALESCE(SUM(CASE WHEN gle.posting_date < %(from_date)s\n                       OR gle.is_opening = 'Yes'\n                      THEN gle.debit - gle.credit END), 0)  AS opening,\n    COALESCE(SUM(CASE WHEN gle.posting_date <= %(to_date)s\n                       OR gle.is_opening = 'Yes'\n                      THEN gle.debit - gle.credit END), 0)  AS closing\nFROM `tabGL Entry` gle\nWHERE gle.is_cancelled = 0\n  AND gle.company = %(company)s\n  AND (\n        (gle.party_type = 'Customer' AND gle.party IN %(party_customers)s)\n     OR (gle.party_type = 'Supplier' AND gle.party IN %(party_suppliers)s)\n  )\n-- %(party_customers)s / %(party_suppliers)s = plain names of the picked Customers / Suppliers\n-- (built from the \"Name (Customer)\" / \"Name (Supplier)\" picks, NULL when none picked).",
+    "source_name": "balances",
+    "source_type": "SQL"
+   },
+   {
+    "description": "Sales, Sales Return (Credit Note, shown positive) and Net from Sales Invoice for all picked Customers.",
+    "parent": "Customer/Supplier Balance Confirmation",
+    "parentfield": "data_sources",
+    "parenttype": "Document Template",
+    "query": "SELECT\n    COALESCE(SUM(CASE WHEN inv.is_return = 0 THEN inv.base_net_total END), 0)                 AS taxable,\n    COALESCE(SUM(CASE WHEN inv.is_return = 0 THEN inv.base_total_taxes_and_charges END), 0)   AS vat,\n    COALESCE(SUM(CASE WHEN inv.is_return = 0 THEN inv.base_grand_total END), 0)               AS total,\n    COALESCE(-SUM(CASE WHEN inv.is_return = 1 THEN inv.base_net_total END), 0)                AS ret_taxable,\n    COALESCE(-SUM(CASE WHEN inv.is_return = 1 THEN inv.base_total_taxes_and_charges END), 0)  AS ret_vat,\n    COALESCE(-SUM(CASE WHEN inv.is_return = 1 THEN inv.base_grand_total END), 0)              AS ret_total,\n    COALESCE(SUM(inv.base_net_total), 0)                                                     AS net_taxable,\n    COALESCE(SUM(inv.base_total_taxes_and_charges), 0)                                       AS net_vat,\n    COALESCE(SUM(inv.base_grand_total), 0)                                                   AS net_total\nFROM `tabSales Invoice` inv\nWHERE inv.docstatus = 1\n  AND inv.company = %(company)s\n  AND inv.customer IN %(party_customers)s\n  AND inv.posting_date BETWEEN %(from_date)s AND %(to_date)s\n-- %(party_customers)s / %(party_suppliers)s = plain names of the picked Customers / Suppliers\n-- (built from the \"Name (Customer)\" / \"Name (Supplier)\" picks, NULL when none picked).",
+    "source_name": "sales",
+    "source_type": "SQL"
+   },
+   {
+    "description": "Purchase, Purchase Return (Debit Note, shown +) and Net from Purchase Invoice for all picked Suppliers.",
+    "parent": "Customer/Supplier Balance Confirmation",
+    "parentfield": "data_sources",
+    "parenttype": "Document Template",
+    "query": "SELECT\n    COALESCE(SUM(CASE WHEN x.is_return = 0 THEN x.taxable END), 0)            AS taxable,\n    COALESCE(SUM(CASE WHEN x.is_return = 0 THEN x.vat END), 0)                AS vat,\n    COALESCE(SUM(CASE WHEN x.is_return = 0 THEN x.taxable + x.vat END), 0)    AS total,\n    COALESCE(-SUM(CASE WHEN x.is_return = 1 THEN x.taxable END), 0)           AS ret_taxable,\n    COALESCE(-SUM(CASE WHEN x.is_return = 1 THEN x.vat END), 0)               AS ret_vat,\n    COALESCE(-SUM(CASE WHEN x.is_return = 1 THEN x.taxable + x.vat END), 0)   AS ret_total,\n    COALESCE(SUM(x.taxable), 0)                                               AS net_taxable,\n    COALESCE(SUM(x.vat), 0)                                                   AS net_vat,\n    COALESCE(SUM(x.taxable + x.vat), 0)                                       AS net_total\nFROM (\n    SELECT inv.is_return, inv.base_net_total AS taxable, COALESCE(vat.amt, 0) AS vat\n    FROM `tabPurchase Invoice` inv\n        LEFT JOIN (SELECT parent, SUM(base_tax_amount) AS amt\n                   FROM `tabPurchase Taxes and Charges`\n                   WHERE account_head LIKE '%%VAT%%' GROUP BY parent) vat ON vat.parent = inv.name\n    WHERE inv.docstatus = 1\n      AND inv.company = %(company)s\n      AND inv.supplier IN %(party_suppliers)s\n      AND inv.posting_date BETWEEN %(from_date)s AND %(to_date)s\n) x\n-- %(party_customers)s / %(party_suppliers)s = plain names of the picked Customers / Suppliers\n-- (built from the \"Name (Customer)\" / \"Name (Supplier)\" picks, NULL when none picked).",
+    "source_name": "purchase",
+    "source_type": "SQL"
+   },
+   {
+    "description": "Company phone / email / website for the footer.",
+    "parent": "Customer/Supplier Balance Confirmation",
+    "parentfield": "data_sources",
+    "parenttype": "Document Template",
+    "query": "SELECT phone_no, email, website FROM `tabCompany` WHERE name = %(company)s",
+    "source_name": "contact",
+    "source_type": "SQL"
+   }
+  ],
+  "default_recipient_field": "email_id",
+  "docstatus": 0,
+  "doctype": "Document Template",
+  "email_subject": "Transaction & Balance Confirmation - {{ company }}",
+  "footer_height": 16.0,
+  "footer_html": "<hr style=\"border:none;border-top:1px solid #000;margin:0 0 3px 0\">\n<div style=\"text-align:center;font-size:10px;color:#333;font-family:'Times New Roman',serif\">\n  {% set ct = data.contact.row %}\n  {% if ct.phone_no %}Tel: {{ ct.phone_no }}{% endif %}\n  {% if ct.email %}&nbsp;&nbsp;|&nbsp;&nbsp;E-mail: {{ ct.email }}{% endif %}\n  {% if ct.website %}&nbsp;&nbsp;|&nbsp;&nbsp;{{ ct.website }}{% endif %}\n</div>",
+  "header_height": 32.0,
+  "header_html": "<div style=\"font-family:'Times New Roman',serif\">\n  {% if org.logo %}<div style=\"text-align:right;margin-top:2px\"><img src=\"{{ org.logo }}\" style=\"width:175px;height:52px;object-fit:contain;display:inline-block\" alt=\"Company logo\"></div>{% endif %}\n  <table style=\"width:100%;border-collapse:collapse;margin-top:8px\">\n    <tr>\n      <td style=\"width:78%;height:7px;padding:0;background-color:#0b243d;-webkit-print-color-adjust:exact\"></td>\n      <td style=\"height:7px;padding:0;background-color:#ec4c25;-webkit-print-color-adjust:exact\"></td>\n    </tr>\n  </table>\n</div>",
+  "inputs": [
+   {
+    "exclusive_group": null,
+    "exclusive_set": null,
+    "fieldname": "party",
+    "input_type": "MultiSelectList",
+    "label": "Customer/Supplier",
+    "options": "rpl_live.custom_code.document_generator.api.search_parties",
+    "parent": "Customer/Supplier Balance Confirmation",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 1
+   },
+   {
+    "exclusive_group": "fy",
+    "exclusive_set": "period",
+    "fieldname": "fiscal_year",
+    "input_type": "Link",
+    "label": "Fiscal Year",
+    "options": "Fiscal Year",
+    "parent": "Customer/Supplier Balance Confirmation",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 1
+   },
+   {
+    "exclusive_group": "range",
+    "exclusive_set": "period",
+    "fieldname": "from_date",
+    "input_type": "Date",
+    "label": "From Date",
+    "options": null,
+    "parent": "Customer/Supplier Balance Confirmation",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 1
+   },
+   {
+    "exclusive_group": "range",
+    "exclusive_set": "period",
+    "fieldname": "to_date",
+    "input_type": "Date",
+    "label": "To Date",
+    "options": null,
+    "parent": "Customer/Supplier Balance Confirmation",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 1
+   }
+  ],
+  "is_active": 1,
+  "letter_head": null,
+  "modified": "2026-11-23 12:00:00.000000",
+  "name": "Customer/Supplier Balance Confirmation",
+  "print_orientation": "Portrait",
+  "target_doctype": null,
+  "template_name": "Customer/Supplier Balance Confirmation"
+ },
+ {
+  "body_html": "{% set p = data.party.row %}\n{% set b = data.balances.row %}\n{% set t = data.txn.row %}\n{% set fy_label = ('FY ' ~ inputs.fiscal_year) if inputs.fiscal_year else (bs(inputs.from_date) ~ ' to ' ~ bs(inputs.to_date)) %}\n\n<div style=\"font-family:'Times New Roman',serif;font-size:14px;color:#000;line-height:1.5\">\n\n  <div style=\"text-align:right;margin-bottom:10px\">Date: {{ today_bs }}</div>\n\n  <div style=\"margin-bottom:12px\">\n    <div>To,</div>\n    <div style=\"font-weight:bold\">{{ p.party_name }}</div>\n    {% if p.address %}<div style=\"white-space:pre-line\">{{ p.address }}</div>{% endif %}\n    {% if p.tax_id %}<div>VAT/PAN: {{ p.tax_id }}</div>{% endif %}\n  </div>\n\n  <div style=\"text-align:center;margin:14px 0;font-weight:bold;text-decoration:underline\">\n    Subject: Transaction &amp; Balance Confirmation of {{ fy_label }}\n  </div>\n\n  <div style=\"margin-bottom:10px\">Dear Sir/Madam,</div>\n\n  <div style=\"margin-bottom:12px;text-align:justify\">\n    This is in reference to the transactions completed by our company with your company/firm\n    during {{ fy_label }}. The records of our company show the following transactions and balance\n    for your confirmation:\n  </div>\n\n  <table style=\"width:100%;border-collapse:collapse;text-align:center;font-size:13px;margin-bottom:14px\">\n    <thead>\n      <tr style=\"background:#f2f2f2\">\n        <th style=\"border:1px solid #000;padding:6px\">Opening Balance</th>\n        <th style=\"border:1px solid #000;padding:6px\">Taxable Purchase<br><span style=\"font-weight:normal\">(Excl. VAT)</span></th>\n        <th style=\"border:1px solid #000;padding:6px\">VAT @13%</th>\n        <th style=\"border:1px solid #000;padding:6px\">TDS</th>\n        <th style=\"border:1px solid #000;padding:6px\">Total Amount</th>\n        <th style=\"border:1px solid #000;padding:6px\">Closing Balance</th>\n      </tr>\n    </thead>\n    <tbody>\n      <tr>\n        <td style=\"border:1px solid #000;padding:6px\">{{ money(b.opening) }}</td>\n        <td style=\"border:1px solid #000;padding:6px\">{{ money(t.taxable) }}</td>\n        <td style=\"border:1px solid #000;padding:6px\">{{ money(t.vat) }}</td>\n        <td style=\"border:1px solid #000;padding:6px\">{{ money(t.tds) }}</td>\n        <td style=\"border:1px solid #000;padding:6px\">{{ money(t.total) }}</td>\n        <td style=\"border:1px solid #000;padding:6px\">{{ money(b.closing) }}</td>\n      </tr>\n    </tbody>\n  </table>\n\n  <div style=\"margin-bottom:30px;text-align:justify\">\n    Please confirm the above mentioned transaction and balance within 7 days of receipt of this\n    letter and provide us with the copy of verified statement. Otherwise we shall consider the\n    above figure as accepted. Your kind cooperation in this respect shall be highly appreciated.\n  </div>\n\n  <div>Thank you.</div>\n\n  <table style=\"width:100%;border-collapse:collapse;margin-top:50px;font-size:13px\">\n    <tr style=\"vertical-align:top\">\n      <td style=\"width:50%;vertical-align:top\">\n        <div>Yours faithfully,</div>\n        <div style=\"min-height:118px\">\n          {% if user.signature %}<img src=\"{{ user.signature }}\" style=\"max-height:80px;margin:4px 14px 4px 0;vertical-align:bottom\">{% endif %}\n          {% if org.stamp %}<img src=\"{{ org.stamp }}\" style=\"max-height:75px;margin:4px 0;vertical-align:bottom\">{% endif %}\n        </div>\n        <div>(Stamp &amp; Signature)</div>\n        <div style=\"font-weight:bold;margin-top:6px\">{{ user.full_name }}</div>\n        <div>{% if user.designation %}{{ user.designation }}{% else %}&nbsp;{% endif %}</div>\n        <div>{{ org.company_name }}</div>\n        {% if org.vat %}<div>VAT No.: {{ org.vat }}</div>{% endif %}\n      </td>\n      <td style=\"width:50%;text-align:right;vertical-align:top\">\n        <div style=\"display:inline-block;text-align:left\">\n        <div>Confirmed by:</div>\n        <div style=\"height:80px\"></div>\n        <div>(Stamp &amp; Signature)</div>\n        <div style=\"margin-top:6px\">Authorized For,</div>\n        <div style=\"font-weight:bold\">{{ p.party_name }}</div>\n        <div style=\"margin-top:16px\">Date: ____/____/________</div>\n        <div style=\"margin-top:14px\">Name: ____________________</div>\n        <div style=\"margin-top:14px\">Contact No.: ______________</div>\n        </div>\n      </td>\n    </tr>\n  </table>\n\n</div>",
+  "companies": [],
+  "data_sources": [
+   {
+    "description": "Supplier name, tax id (VAT/PAN) and primary address.",
+    "parent": "Vendor Balance Confirmation",
+    "parentfield": "data_sources",
+    "parenttype": "Document Template",
+    "query": "SELECT p.supplier_name AS party_name, p.tax_id AS tax_id, a.address_line1 AS address\nFROM `tabSupplier` p\n    LEFT JOIN `tabAddress` a ON a.name = p.supplier_primary_address\nWHERE p.name = %(supplier)s",
+    "source_name": "party",
+    "source_type": "SQL"
+   },
+   {
+    "description": "Opening / closing balance from GL Entry.",
+    "parent": "Vendor Balance Confirmation",
+    "parentfield": "data_sources",
+    "parenttype": "Document Template",
+    "query": "SELECT\n    COALESCE(SUM(CASE WHEN gle.posting_date < %(from_date)s\n                       OR gle.is_opening = 'Yes'\n                      THEN gle.debit - gle.credit END), 0)  AS opening,\n    COALESCE(SUM(CASE WHEN gle.posting_date <= %(to_date)s\n                       OR gle.is_opening = 'Yes'\n                      THEN gle.debit - gle.credit END), 0)  AS closing\nFROM `tabGL Entry` gle\nWHERE gle.is_cancelled = 0\n  AND gle.company = %(company)s\n  AND gle.party_type = 'Supplier'\n  AND gle.party = %(supplier)s",
+    "source_name": "balances",
+    "source_type": "SQL"
+   },
+   {
+    "description": "Period taxable, VAT, TDS and total from Purchase Invoice.",
+    "parent": "Vendor Balance Confirmation",
+    "parentfield": "data_sources",
+    "parenttype": "Document Template",
+    "query": "SELECT\n    COALESCE(SUM(inv.base_net_total), 0)   AS taxable,\n    COALESCE(SUM(vat.amt), 0)              AS vat,\n    COALESCE(SUM(tds.amt), 0)              AS tds,\n    COALESCE(SUM(inv.base_grand_total), 0) AS total\nFROM `tabPurchase Invoice` inv\n    LEFT JOIN (SELECT parent, SUM(base_tax_amount) AS amt\n               FROM `tabPurchase Taxes and Charges`\n               WHERE account_head LIKE '%%VAT%%' GROUP BY parent) vat ON vat.parent = inv.name\n    LEFT JOIN (SELECT parent, SUM(base_tax_amount) AS amt\n               FROM `tabPurchase Taxes and Charges`\n               WHERE account_head LIKE '%%TDS%%' GROUP BY parent) tds ON tds.parent = inv.name\nWHERE inv.docstatus = 1\n  AND inv.company = %(company)s\n  AND inv.supplier = %(supplier)s\n  AND inv.posting_date BETWEEN %(from_date)s AND %(to_date)s",
+    "source_name": "txn",
+    "source_type": "SQL"
+   },
+   {
+    "description": "Company phone / email / website for the footer.",
+    "parent": "Vendor Balance Confirmation",
+    "parentfield": "data_sources",
+    "parenttype": "Document Template",
+    "query": "SELECT phone_no, email, website FROM `tabCompany` WHERE name = %(company)s",
+    "source_name": "contact",
+    "source_type": "SQL"
+   }
+  ],
+  "default_recipient_field": "email_id",
+  "docstatus": 0,
+  "doctype": "Document Template",
+  "email_subject": "Transaction & Balance Confirmation - {{ company }}",
+  "footer_height": 16.0,
+  "footer_html": "<hr style=\"border:none;border-top:1px solid #000;margin:0 0 3px 0\">\n<div style=\"text-align:center;font-size:10px;color:#333;font-family:'Times New Roman',serif\">\n  {% set ct = data.contact.row %}\n  {% if ct.phone_no %}Tel: {{ ct.phone_no }}{% endif %}\n  {% if ct.email %}&nbsp;&nbsp;|&nbsp;&nbsp;E-mail: {{ ct.email }}{% endif %}\n  {% if ct.website %}&nbsp;&nbsp;|&nbsp;&nbsp;{{ ct.website }}{% endif %}\n</div>",
+  "header_height": 32.0,
+  "header_html": "<div style=\"font-family:'Times New Roman',serif\">\n  {% if org.logo %}<div style=\"text-align:right;margin-top:2px\"><img src=\"{{ org.logo }}\" style=\"width:175px;height:52px;object-fit:contain;display:inline-block\" alt=\"Company logo\"></div>{% endif %}\n  <table style=\"width:100%;border-collapse:collapse;margin-top:8px\">\n    <tr>\n      <td style=\"width:78%;height:7px;padding:0;background-color:#0b243d;-webkit-print-color-adjust:exact\"></td>\n      <td style=\"height:7px;padding:0;background-color:#ec4c25;-webkit-print-color-adjust:exact\"></td>\n    </tr>\n  </table>\n</div>",
+  "inputs": [
+   {
+    "exclusive_group": null,
+    "exclusive_set": null,
+    "fieldname": "supplier",
+    "input_type": "Link",
+    "label": "Supplier",
+    "options": "Supplier",
+    "parent": "Vendor Balance Confirmation",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 1
+   },
+   {
+    "exclusive_group": "fy",
+    "exclusive_set": "period",
+    "fieldname": "fiscal_year",
+    "input_type": "Link",
+    "label": "Fiscal Year",
+    "options": "Fiscal Year",
+    "parent": "Vendor Balance Confirmation",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 1
+   },
+   {
+    "exclusive_group": "range",
+    "exclusive_set": "period",
+    "fieldname": "from_date",
+    "input_type": "Date",
+    "label": "From Date",
+    "options": null,
+    "parent": "Vendor Balance Confirmation",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 1
+   },
+   {
+    "exclusive_group": "range",
+    "exclusive_set": "period",
+    "fieldname": "to_date",
+    "input_type": "Date",
+    "label": "To Date",
+    "options": null,
+    "parent": "Vendor Balance Confirmation",
+    "parentfield": "inputs",
+    "parenttype": "Document Template",
+    "reqd": 1
+   }
+  ],
+  "is_active": 1,
+  "letter_head": null,
+  "modified": "2026-11-23 12:00:00.000000",
+  "name": "Vendor Balance Confirmation",
+  "print_orientation": "Portrait",
+  "target_doctype": null,
+  "template_name": "Vendor Balance Confirmation"
+ }
+]
