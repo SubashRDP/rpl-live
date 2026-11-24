@@ -1,53 +1,60 @@
 [
  {
-  "body_html": "{% set p = data.party.row %}\n{% set b = data.balances.row %}\n{% set t = data.txn.row %}\n{% set fy_label = ('FY ' ~ inputs.fiscal_year) if inputs.fiscal_year else (bs(inputs.from_date) ~ ' to ' ~ bs(inputs.to_date)) %}\n\n<div style=\"font-family:'Times New Roman',serif;font-size:14px;color:#000;line-height:1.5\">\n\n  <div style=\"text-align:right;margin-bottom:10px\">Date: {{ today_bs }}</div>\n\n  <div style=\"margin-bottom:12px\">\n    <div>To,</div>\n    <div style=\"font-weight:bold\">{{ p.party_name }}</div>\n    {% if p.address %}<div style=\"white-space:pre-line\">{{ p.address }}</div>{% endif %}\n    {% if p.tax_id %}<div>VAT/PAN: {{ p.tax_id }}</div>{% endif %}\n  </div>\n\n  <div style=\"text-align:center;margin:14px 0;font-weight:bold;text-decoration:underline\">\n    Subject: Transaction &amp; Balance Confirmation of {{ fy_label }}\n  </div>\n\n  <div style=\"margin-bottom:10px\">Dear Sir/Madam,</div>\n\n  <div style=\"margin-bottom:12px;text-align:justify\">\n    This is in reference to the transactions completed by our company with your company/firm\n    during {{ fy_label }}. The records of our company show the following transactions and balance\n    for your confirmation:\n  </div>\n\n  <table style=\"width:100%;border-collapse:collapse;text-align:center;font-size:13px;margin-bottom:14px\">\n    <thead>\n      <tr style=\"background:#f2f2f2\">\n        <th style=\"border:1px solid #000;padding:6px\">Opening Balance</th>\n        <th style=\"border:1px solid #000;padding:6px\">Taxable Sales<br><span style=\"font-weight:normal\">(Excl. VAT)</span></th>\n        <th style=\"border:1px solid #000;padding:6px\">VAT @13%</th>\n        <th style=\"border:1px solid #000;padding:6px\">Total Amount</th>\n        <th style=\"border:1px solid #000;padding:6px\">Closing Balance</th>\n      </tr>\n    </thead>\n    <tbody>\n      <tr>\n        <td style=\"border:1px solid #000;padding:6px\">{{ money(b.opening) }}</td>\n        <td style=\"border:1px solid #000;padding:6px\">{{ money(t.taxable) }}</td>\n        <td style=\"border:1px solid #000;padding:6px\">{{ money(t.vat) }}</td>\n        <td style=\"border:1px solid #000;padding:6px\">{{ money(t.total) }}</td>\n        <td style=\"border:1px solid #000;padding:6px\">{{ money(b.closing) }}</td>\n      </tr>\n    </tbody>\n  </table>\n\n  <div style=\"margin-bottom:30px;text-align:justify\">\n    Please confirm the above mentioned transaction and balance within 7 days of receipt of this\n    letter and provide us with the copy of verified statement. Otherwise we shall consider the\n    above figure as accepted. Your kind cooperation in this respect shall be highly appreciated.\n  </div>\n\n  <div>Thank you for your cooperation.</div>\n\n  <table style=\"width:100%;border-collapse:collapse;margin-top:50px;font-size:13px\">\n    <tr style=\"vertical-align:top\">\n      <td style=\"width:50%;vertical-align:top\">\n        <div>Yours faithfully,</div>\n        <div style=\"min-height:118px\">\n          {% if user.signature %}<img src=\"{{ user.signature }}\" style=\"max-height:80px;margin:4px 14px 4px 0;vertical-align:bottom\">{% endif %}\n          {% if org.stamp %}<img src=\"{{ org.stamp }}\" style=\"max-height:75px;margin:4px 0;vertical-align:bottom\">{% endif %}\n        </div>\n        <div>(Stamp &amp; Signature)</div>\n        <div style=\"font-weight:bold;margin-top:6px\">{{ user.full_name }}</div>\n        <div>{% if user.designation %}{{ user.designation }}{% else %}&nbsp;{% endif %}</div>\n        <div>{{ org.company_name }}</div>\n        {% if org.vat %}<div>VAT No.: {{ org.vat }}</div>{% endif %}\n      </td>\n      <td style=\"width:50%;text-align:right;vertical-align:top\">\n        <div style=\"display:inline-block;text-align:left\">\n        <div>Confirmed by:</div>\n        <div style=\"height:80px\"></div>\n        <div>(Stamp &amp; Signature)</div>\n        <div style=\"margin-top:6px\">Authorized For,</div>\n        <div style=\"font-weight:bold\">{{ p.party_name }}</div>\n        <div style=\"margin-top:16px\">Date: ____/____/________</div>\n        <div style=\"margin-top:14px\">Name: ____________________</div>\n        <div style=\"margin-top:14px\">Contact No.: ______________</div>\n        </div>\n      </td>\n    </tr>\n  </table>\n\n</div>",
-  "companies": [],
+  "body_html": "{% set p = data.party.row %}{% set b = data.balances.row %}{% set months = ['Baisakh', 'Jestha', 'Ashad', 'Shrawan', 'Bhadra', 'Ashwin', 'Kartik', 'Magsir', 'Poush', 'Magh', 'Falgun', 'Chaitra'] %}{% set raw = inputs.letter_date_bs if (inputs.letter_date_bs is string and inputs.letter_date_bs) else bs(inputs.letter_date) %}{% set parts = (raw|string).replace('/', '-').split('-') %}{% set mon = parts[1]|int if parts|length == 3 else 0 %}{% set day = parts[2]|int if parts|length == 3 else 0 %}{% set suffix = 'th' if (day % 100 >= 11 and day % 100 <= 13) else {1: 'st', 2: 'nd', 3: 'rd'}.get(day % 10, 'th') %}{% set s = data.invoice_total.row %}{% set fy = bs(inputs.from_date)[:4] ~ '/' ~ bs(inputs.to_date)[2:4] %}\n<div style=\"font-size:11pt;line-height:1.6;margin-top:22px\"><div class=\"dg-cbc-top\" style=\"min-height:990px\"><div>Ref No.: {{ inputs.ref_no or '' }}</div><div style=\"text-align:right\">Date: {% if mon >= 1 and mon <= 12 and day >= 1 %}{{ '%02d'|format(day) }}<sup>{{ suffix }}</sup> {{ months[mon - 1] }}, {{ parts[0] }}{% endif %}</div>\n<div style=\"margin-top:18px\">To. {{ p.party_name or '' }}<br>PAN No: {{ p.tax_id or '' }}</div><div style=\"text-align:center;text-decoration:underline;margin-top:4px\">Ref: Account Confirmation for FY {{ fy }}</div>\n<p style=\"margin-top:18px\">Dear Sir/ Madam,</p><p>As per our account books showing following details regarding of Account Confirmation, we have confirmed our account at the Ashad end of FY {{ fy }}.</p>\n<table style=\"width:100%;margin-top:12px\"><tr style=\"font-weight:bold;text-decoration:underline\"><td>Invoice No.</td><td>Taxable Amount</td><td>VAT Amount</td><td>Total Amount</td></tr>{% for r in data.invoices.rows %}<tr><td style=\"padding-left:14px\">{{ r.invoice_no }}</td><td>{{ money(r.taxable) }}</td><td>{{ money(r.vat) }}</td><td>{{ money(r.total) }}</td></tr>{% endfor %}<tr style=\"font-weight:bold\"><td>Total Amount</td><td><u>{{ money(s.taxable) }}</u></td><td><u>{{ money(s.vat) }}</u></td><td><u>{{ money(s.total) }}</u></td></tr></table>\n<p style=\"margin-top:20px;font-weight:bold\">Opening Balance: Rs. {{ money(b.opening_abs) }} ({{ b.opening_side }}.)<br>Closing Balance / {{ 'Receivable' if b.closing_side == 'Dr' else 'Payable' }}: Rs. {{ money(b.closing_abs) }} ({{ b.closing_side }}.)</p>\n<p style=\"margin-top:18px\">Please confirm our balance as per our attached documents within 15 working days from the received date of this confirmation letter. If we don't receive your confirmation in this regard in time, it will be considered as our balance is okay.</p><p style=\"margin-top:16px\">Thanking you for your kind cooperation.<br>For: Raindrop Inc Pvt. Ltd.</p>\n</div><table style=\"width:100%;margin-top:30px\"><tr><td style=\"width:46%;vertical-align:top\">........................<br>Raindrop Inc Pvt. Ltd.<br>Finance Department<br>PAN: {{ org.vat }}</td><td style=\"text-align:center;vertical-align:top\">..................<br>Received by</td><td style=\"text-align:center;vertical-align:top\">..................<br>Received Date</td><td style=\"text-align:center;vertical-align:top\">..................<br>Company Seal</td></tr></table></div>",
+  "companies": [
+   {
+    "company": "Raindrop Inc. Private Limited",
+    "parent": "Customer Balance Confirmation",
+    "parentfield": "companies",
+    "parenttype": "Document Template"
+   }
+  ],
   "data_sources": [
    {
-    "description": "Customer name, tax id (VAT/PAN) and primary address.",
+    "description": "Customer name and PAN",
     "parent": "Customer Balance Confirmation",
     "parentfield": "data_sources",
     "parenttype": "Document Template",
-    "query": "SELECT p.customer_name AS party_name, p.tax_id AS tax_id, a.address_line1 AS address\nFROM `tabCustomer` p\n    LEFT JOIN `tabAddress` a ON a.name = p.customer_primary_address\nWHERE p.name = %(customer)s",
+    "query": "SELECT p.customer_name AS party_name, p.tax_id AS tax_id, a.address_line1 AS address\nFROM `tabCustomer` p LEFT JOIN `tabAddress` a ON a.name = p.customer_primary_address WHERE p.name = %(customer)s",
     "source_name": "party",
     "source_type": "SQL"
    },
    {
-    "description": "Opening / closing balance from GL Entry.",
+    "description": "Opening and closing balance from GL",
     "parent": "Customer Balance Confirmation",
     "parentfield": "data_sources",
     "parenttype": "Document Template",
-    "query": "SELECT\n    COALESCE(SUM(CASE WHEN gle.posting_date < %(from_date)s\n                       OR gle.is_opening = 'Yes'\n                      THEN gle.debit - gle.credit END), 0)  AS opening,\n    COALESCE(SUM(CASE WHEN gle.posting_date <= %(to_date)s\n                       OR gle.is_opening = 'Yes'\n                      THEN gle.debit - gle.credit END), 0)  AS closing\nFROM `tabGL Entry` gle\nWHERE gle.is_cancelled = 0\n  AND gle.company = %(company)s\n  AND gle.party_type = 'Customer'\n  AND gle.party = %(customer)s",
+    "query": "SELECT ABS(x.opening) AS opening_abs, IF(x.opening < 0, 'Cr', 'Dr') AS opening_side, ABS(x.closing) AS closing_abs, IF(x.closing < 0, 'Cr', 'Dr') AS closing_side FROM (\nSELECT COALESCE(SUM(CASE WHEN g.posting_date < %(from_date)s OR g.is_opening = 'Yes' THEN g.debit - g.credit END), 0) AS opening,\nCOALESCE(SUM(CASE WHEN g.posting_date <= %(to_date)s OR g.is_opening = 'Yes' THEN g.debit - g.credit END), 0) AS closing\nFROM `tabGL Entry` g WHERE g.is_cancelled = 0 AND g.company = %(company)s AND g.party_type = 'Customer' AND g.party = %(customer)s) x",
     "source_name": "balances",
     "source_type": "SQL"
    },
    {
-    "description": "Period taxable, VAT and total from Sales Invoice.",
+    "description": "Invoices in the fiscal year",
     "parent": "Customer Balance Confirmation",
     "parentfield": "data_sources",
     "parenttype": "Document Template",
-    "query": "SELECT\n    COALESCE(SUM(inv.base_net_total), 0)                AS taxable,\n    COALESCE(SUM(inv.base_total_taxes_and_charges), 0)  AS vat,\n    0                                                   AS tds,\n    COALESCE(SUM(inv.base_grand_total), 0)              AS total\nFROM `tabSales Invoice` inv\nWHERE inv.docstatus = 1\n  AND inv.company = %(company)s\n  AND inv.customer = %(customer)s\n  AND inv.posting_date BETWEEN %(from_date)s AND %(to_date)s",
-    "source_name": "txn",
+    "query": "SELECT CASE WHEN inv.name REGEXP '/[0-9]+-[0-9]+(-[0-9]+)?$' THEN CONCAT(LPAD(CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(SUBSTRING_INDEX(inv.name, '/', -1), '-', 2), '-', -1) AS UNSIGNED), GREATEST(3, CHAR_LENGTH(CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(SUBSTRING_INDEX(inv.name, '/', -1), '-', 2), '-', -1) AS UNSIGNED))), '0'), SUBSTRING(SUBSTRING_INDEX(inv.name, '/', -1), CHAR_LENGTH(SUBSTRING_INDEX(SUBSTRING_INDEX(inv.name, '/', -1), '-', 2)) + 1)) ELSE inv.name END AS invoice_no, inv.base_net_total AS taxable, inv.base_total_taxes_and_charges AS vat, inv.base_grand_total AS total FROM `tabSales Invoice` inv WHERE inv.docstatus = 1 AND inv.company = %(company)s AND inv.customer = %(customer)s AND inv.posting_date BETWEEN %(from_date)s AND %(to_date)s ORDER BY inv.posting_date, inv.name",
+    "source_name": "invoices",
     "source_type": "SQL"
    },
    {
-    "description": "Company phone / email / website for the footer.",
+    "description": "Invoice totals",
     "parent": "Customer Balance Confirmation",
     "parentfield": "data_sources",
     "parenttype": "Document Template",
-    "query": "SELECT phone_no, email, website FROM `tabCompany` WHERE name = %(company)s",
-    "source_name": "contact",
+    "query": "SELECT COALESCE(SUM(inv.base_net_total), 0) AS taxable, COALESCE(SUM(inv.base_total_taxes_and_charges), 0) AS vat, COALESCE(SUM(inv.base_grand_total), 0) AS total FROM `tabSales Invoice` inv WHERE inv.docstatus = 1 AND inv.company = %(company)s AND inv.customer = %(customer)s AND inv.posting_date BETWEEN %(from_date)s AND %(to_date)s",
+    "source_name": "invoice_total",
     "source_type": "SQL"
    }
   ],
   "default_recipient_field": "email_id",
   "docstatus": 0,
   "doctype": "Document Template",
-  "email_subject": "Transaction & Balance Confirmation - {{ company }}",
-  "footer_height": 16.0,
-  "footer_html": "<hr style=\"border:none;border-top:1px solid #000;margin:0 0 3px 0\">\n<div style=\"text-align:center;font-size:10px;color:#333;font-family:'Times New Roman',serif\">\n  {% set ct = data.contact.row %}\n  {% if ct.phone_no %}Tel: {{ ct.phone_no }}{% endif %}\n  {% if ct.email %}&nbsp;&nbsp;|&nbsp;&nbsp;E-mail: {{ ct.email }}{% endif %}\n  {% if ct.website %}&nbsp;&nbsp;|&nbsp;&nbsp;{{ ct.website }}{% endif %}\n</div>",
-  "header_height": 32.0,
-  "header_html": "<div style=\"font-family:'Times New Roman',serif\">\n  {% if org.logo %}<div style=\"text-align:right;margin-top:2px\"><img src=\"{{ org.logo }}\" style=\"width:175px;height:52px;object-fit:contain;display:inline-block\" alt=\"Company logo\"></div>{% endif %}\n  <table style=\"width:100%;border-collapse:collapse;margin-top:8px\">\n    <tr>\n      <td style=\"width:78%;height:7px;padding:0;background-color:#0b243d;-webkit-print-color-adjust:exact\"></td>\n      <td style=\"height:7px;padding:0;background-color:#ec4c25;-webkit-print-color-adjust:exact\"></td>\n    </tr>\n  </table>\n</div>",
+  "email_subject": "Account Confirmation - {{ company }}",
+  "footer_height": 6.0,
+  "footer_html": "<table style=\"width:100%;border-collapse:collapse\"><tr><td style=\"height:5px;width:50%;background:#176b87\"></td><td style=\"height:5px;background:#333\"></td></tr></table>",
+  "header_height": 36.0,
+  "header_html": "<style>.dg-cbc-top{min-height:960px !important}</style><table style=\"width:100%;border-collapse:collapse\"><tr><td style=\"vertical-align:top\">{% if org.logo %}<img src=\"{{ org.logo }}\" style=\"height:64px;max-width:240px\" alt=\"Company logo\">{% else %}<div style=\"display:inline-block;border:1px solid #1d2340;border-radius:4px;padding:8px 14px;font-size:27px;font-weight:bold;letter-spacing:1px;color:#10172e\">RAINDROP</div>{% endif %}</td><td style=\"text-align:right;font-size:9.5pt;line-height:1.5\"><b>Raindrop Inc Pvt Ltd<br>Nava Marg Lazimpat<br>29 - Kathmandu,Nepal</b><br>+977-14500027<br>info@raindropinc.com<br>www.raindropinc.com</td></tr></table>",
   "inputs": [
    {
     "exclusive_group": null,
@@ -62,8 +69,8 @@
     "reqd": 1
    },
    {
-    "exclusive_group": "fy",
-    "exclusive_set": "period",
+    "exclusive_group": null,
+    "exclusive_set": null,
     "fieldname": "fiscal_year",
     "input_type": "Link",
     "label": "Fiscal Year",
@@ -74,11 +81,11 @@
     "reqd": 1
    },
    {
-    "exclusive_group": "range",
-    "exclusive_set": "period",
-    "fieldname": "from_date",
-    "input_type": "Date",
-    "label": "From Date",
+    "exclusive_group": null,
+    "exclusive_set": null,
+    "fieldname": "ref_no",
+    "input_type": "Data",
+    "label": "Ref No",
     "options": null,
     "parent": "Customer Balance Confirmation",
     "parentfield": "inputs",
@@ -86,11 +93,11 @@
     "reqd": 1
    },
    {
-    "exclusive_group": "range",
-    "exclusive_set": "period",
-    "fieldname": "to_date",
+    "exclusive_group": null,
+    "exclusive_set": null,
+    "fieldname": "letter_date",
     "input_type": "Date",
-    "label": "To Date",
+    "label": "Letter Date",
     "options": null,
     "parent": "Customer Balance Confirmation",
     "parentfield": "inputs",
@@ -99,8 +106,8 @@
    }
   ],
   "is_active": 1,
-  "letter_head": null,
-  "modified": "2026-11-23 12:00:00.000000",
+  "letter_head": "Raindrop",
+  "modified": "2026-11-24 13:00:00.000000",
   "name": "Customer Balance Confirmation",
   "print_orientation": "Portrait",
   "target_doctype": null,

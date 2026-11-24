@@ -380,6 +380,13 @@ class DocumentGenerator {
 		this.custom_inputs.forEach((inp) => {
 			payload[inp.fieldname] = this.controls[inp.fieldname]?.get_value();
 		});
+		// Send each Date input's BS value too (as <fieldname>_bs). The desk BS converter
+		// is the correct one, so templates can print the Nepali date without converting
+		// it again on the server.
+		Object.keys(this.bs_partners || {}).forEach((fieldname) => {
+			const bs_value = this.bs_partners[fieldname].get_value();
+			if (bs_value) payload[`${fieldname}_bs`] = bs_value;
+		});
 		return payload;
 	}
 
